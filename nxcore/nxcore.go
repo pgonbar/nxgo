@@ -403,13 +403,22 @@ func (nc *NexusConn) ExecNoWait(method string, params interface{}) (id uint64, r
 	return
 }
 
-// Exec is a low level JSON-RPC call function.
-func (nc *NexusConn) Exec(method string, params interface{}) (result interface{}, err error) {
+// ExecCtx is a low level JSON-RPC call function with context support.
+// It records OTel metrics (rpc.client.request.duration, rpc.client.requests)
+// and creates a client span for every call. If ctx carries an active span it
+// becomes the parent; otherwise a root span is created.
+func (nc *NexusConn) ExecCtx(ctx context.Context, method string, params interface{}) (result interface{}, err error) {
+	start := time.Now()
+	ctx, span := startClientSpan(ctx, method)
+	defer func() { endClientSpan(span, err) }()
+
 	id, rch, err := nc.ExecNoWait(method, params)
 	if err != nil {
+		recordRPCCall(ctx, start, method, err)
 		return nil, err
 	}
 	defer nc.delId(id)
+
 	select {
 	case res := <-rch:
 		if res.Error != nil {
@@ -420,7 +429,16 @@ func (nc *NexusConn) Exec(method string, params interface{}) (result interface{}
 	case <-nc.context.Done():
 		err = NewJsonRpcErr(ErrConnClosed, "", nil)
 	}
+
+	recordRPCCall(ctx, start, method, err)
 	return
+}
+
+// Exec is a low level JSON-RPC call function.
+// It delegates to ExecCtx with context.Background(), producing a root span.
+// Prefer ExecCtx when a propagated context is available.
+func (nc *NexusConn) Exec(method string, params interface{}) (result interface{}, err error) {
+	return nc.ExecCtx(context.Background(), method, params)
 }
 
 // Ping pings Nexus server, timeout is the max time waiting for server response,

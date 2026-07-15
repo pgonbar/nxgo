@@ -1,6 +1,7 @@
 package nxcore
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -8,16 +9,14 @@ import (
 	"github.com/jaracil/ei"
 )
 
-// TaskPush pushes a task to Nexus cloud.
-// method is the method path Ex. "test.fibonacci.fib"
-// params is the method params object.
-// timeout is the maximum time waiting for response, 0 = no timeout.
-// options (see TaskOpts struct)
-// Returns the task result or error.
-func (nc *NexusConn) TaskPush(method string, params interface{}, timeout time.Duration, opts ...*TaskOpts) (interface{}, error) {
+// TaskPushCtx pushes a task to Nexus with context propagation.
+// If ctx carries an active OTel span its W3C traceparent is injected into
+// params["@metadata"]["traceparent"], enabling end-to-end trace correlation
+// through the Nexus broker to the worker that pulls the task.
+func (nc *NexusConn) TaskPushCtx(ctx context.Context, method string, params interface{}, timeout time.Duration, opts ...*TaskOpts) (interface{}, error) {
 	par := ei.M{
 		"method": method,
-		"params": params,
+		"params": injectTraceparent(ctx, params),
 	}
 	if len(opts) > 0 {
 		if opts[0].Priority != 0 {
@@ -33,7 +32,17 @@ func (nc *NexusConn) TaskPush(method string, params interface{}, timeout time.Du
 	if timeout > 0 {
 		par["timeout"] = float64(timeout) / float64(time.Second)
 	}
-	return nc.Exec("task.push", par)
+	return nc.ExecCtx(ctx, "task.push", par)
+}
+
+// TaskPush pushes a task to Nexus cloud.
+// method is the method path Ex. "test.fibonacci.fib"
+// params is the method params object.
+// timeout is the maximum time waiting for response, 0 = no timeout.
+// options (see TaskOpts struct)
+// Returns the task result or error.
+func (nc *NexusConn) TaskPush(method string, params interface{}, timeout time.Duration, opts ...*TaskOpts) (interface{}, error) {
+	return nc.TaskPushCtx(context.Background(), method, params, timeout, opts...)
 }
 
 // TaskPushCh pushes a task to Nexus cloud.
