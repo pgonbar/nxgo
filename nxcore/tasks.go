@@ -147,22 +147,28 @@ func (nc *NexusConn) TaskCount(prefix string, opts ...*CountOpts) (interface{}, 
 	return nc.Exec("task.count", par)
 }
 
-// SendResult closes Task with result.
+// SendResultCtx closes Task with result, propagating the OTel trace context.
 // Returns the response object from Nexus or error.
-func (t *Task) SendResult(res interface{}) (interface{}, error) {
+func (t *Task) SendResultCtx(ctx context.Context, res interface{}) (interface{}, error) {
 	par := map[string]interface{}{
 		"taskid": t.Id,
 		"result": res,
 	}
-	return t.nc.Exec("task.result", par)
+	return t.nc.ExecCtx(ctx, "task.result", par)
 }
 
-// SendError closes Task with error.
+// SendResult closes Task with result.
+// Returns the response object from Nexus or error.
+func (t *Task) SendResult(res interface{}) (interface{}, error) {
+	return t.SendResultCtx(context.Background(), res)
+}
+
+// SendErrorCtx closes Task with error, propagating the OTel trace context.
 // code is the JSON-RPC error code.
 // message is optional in case of well known error code (negative values).
 // data is an optional extra info object.
 // Returns the response object from Nexus or error.
-func (t *Task) SendError(code int, message string, data interface{}) (interface{}, error) {
+func (t *Task) SendErrorCtx(ctx context.Context, code int, message string, data interface{}) (interface{}, error) {
 	if code < 0 {
 		if errstr, ok := ErrStr[code]; ok {
 			if message != "" {
@@ -178,7 +184,16 @@ func (t *Task) SendError(code int, message string, data interface{}) (interface{
 		"message": message,
 		"data":    data,
 	}
-	return t.nc.Exec("task.error", par)
+	return t.nc.ExecCtx(ctx, "task.error", par)
+}
+
+// SendError closes Task with error.
+// code is the JSON-RPC error code.
+// message is optional in case of well known error code (negative values).
+// data is an optional extra info object.
+// Returns the response object from Nexus or error.
+func (t *Task) SendError(code int, message string, data interface{}) (interface{}, error) {
+	return t.SendErrorCtx(context.Background(), code, message, data)
 }
 
 // Reject rejects the task. Task is returned to Nexus tasks queue.
