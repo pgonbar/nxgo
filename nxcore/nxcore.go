@@ -441,10 +441,14 @@ func (nc *NexusConn) Exec(method string, params interface{}) (result interface{}
 	return nc.ExecCtx(context.Background(), method, params)
 }
 
-// Ping pings Nexus server, timeout is the max time waiting for server response,
-// after that ErrTimeout is returned.
-func (nc *NexusConn) Ping(timeout time.Duration) (err error) {
-	id, rch, err := nc.ExecNoWait("sys.ping", nil)
+// PingCtx pings Nexus server, timeout is the max time waiting for server response,
+// after that ErrTimeout is returned. Records OTel metrics and creates a client span.
+func (nc *NexusConn) PingCtx(ctx context.Context, timeout time.Duration) (err error) {
+	start := time.Now()
+	ctx, span := startClientSpan(ctx, "sys.ping")
+	defer func() { endClientSpan(span, err); recordRPCCall(ctx, start, "sys.ping", err) }()
+
+	id, rch, err := nc.ExecNoWait("sys.ping", injectTraceparent(ctx, nil))
 	if err != nil {
 		return
 	}
@@ -458,6 +462,12 @@ func (nc *NexusConn) Ping(timeout time.Duration) (err error) {
 		err = NewJsonRpcErr(ErrConnClosed, "", nil)
 	}
 	return
+}
+
+// Ping pings Nexus server, timeout is the max time waiting for server response,
+// after that ErrTimeout is returned.
+func (nc *NexusConn) Ping(timeout time.Duration) (err error) {
+	return nc.PingCtx(context.Background(), timeout)
 }
 
 // SetSessionExpirationTimeout sets an expiration timeout. When it is reached the connection will be closed

@@ -196,21 +196,29 @@ func (t *Task) SendError(code int, message string, data interface{}) (interface{
 	return t.SendErrorCtx(context.Background(), code, message, data)
 }
 
-// Reject rejects the task. Task is returned to Nexus tasks queue.
-func (t *Task) Reject() (interface{}, error) {
+// RejectCtx rejects the task, propagating the OTel trace context.
+// Task is returned to Nexus tasks queue.
+func (t *Task) RejectCtx(ctx context.Context) (interface{}, error) {
 	par := map[string]interface{}{
 		"taskid": t.Id,
 	}
-	return t.nc.Exec("task.reject", par)
+	return t.nc.ExecCtx(ctx, "task.reject", par)
+}
+
+// Reject rejects the task. Task is returned to Nexus tasks queue.
+func (t *Task) Reject() (interface{}, error) {
+	return t.RejectCtx(context.Background())
+}
+
+// AcceptCtx accepts a detached task, propagating the OTel trace context.
+// Is an alias for SendResultCtx(ctx, nil).
+func (t *Task) AcceptCtx(ctx context.Context) (interface{}, error) {
+	return t.SendResultCtx(ctx, nil)
 }
 
 // Accept accepts a detached task. Is an alias for SendResult(nil).
 func (t *Task) Accept() (interface{}, error) {
-	par := map[string]interface{}{
-		"taskid": t.Id,
-		"result": nil,
-	}
-	return t.nc.Exec("task.result", par)
+	return t.AcceptCtx(context.Background())
 }
 
 // GetConn retrieves the task underlying nexus connection.
