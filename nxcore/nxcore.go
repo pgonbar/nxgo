@@ -460,7 +460,7 @@ func (nc *NexusConn) Ping(timeout time.Duration) (err error) {
 	return
 }
 
-//SetSessionExpirationTimeout sets an expiration timeout. When it is reached the connection will be closed
+// SetSessionExpirationTimeout sets an expiration timeout. When it is reached the connection will be closed
 func (nc *NexusConn) SetInactivityTimeout(timeout time.Duration) (err error) {
 	if nc.Closed() {
 		err = NewJsonRpcErr(ErrConnClosed, "", nil)
