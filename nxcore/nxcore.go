@@ -404,8 +404,7 @@ func (nc *NexusConn) ExecNoWait(method string, params interface{}) (id uint64, r
 }
 
 // ExecCtx is a low level JSON-RPC call function with context support.
-// It records OTel metrics (rpc.client.request.duration, rpc.client.requests)
-// and creates a client span for every call. If ctx carries an active span it
+// It records OTel metrics and creates a client span for every call. If ctx carries an active span it
 // becomes the parent; otherwise a root span is created.
 func (nc *NexusConn) ExecCtx(ctx context.Context, method string, params interface{}) (result interface{}, err error) {
 	start := time.Now()

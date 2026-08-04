@@ -13,26 +13,24 @@ import (
 
 var rpcOtel = nxotel.New("github.com/nayarsystems/nxgo", nxotel.Client, nexusErrorType)
 
-// recordRPCCall records duration and request count for one Nexus RPC call.
+// recordRPCCall records metrics for one Nexus RPC call.
 func recordRPCCall(ctx context.Context, start time.Time, method string, err error) {
 	rpcOtel.RecordCall(ctx, start, method, "", err)
 }
 
-// nexusErrorType returns a short string describing the Nexus/JSON-RPC error,
-// suitable for use as the error.type metric attribute.
+// nexusErrorType returns a short string describing the Nexus/JSON-RPC error.
 func nexusErrorType(err error) string {
 	return nxotel.ErrorTypeFromCode(err, ErrStr, "unknown")
 }
 
 // injectTraceparent injects the W3C traceparent from ctx into
-// params["@metadata"]["traceparent"], following the same @metadata convention
-// nxsugar already uses for trackid.
+// params["@metadata"]["traceparent"]
 //
 // Returns the (possibly cloned+enriched) params value. If ctx has no active
 // span, or if params is not a map type, the original value is returned unchanged.
 func injectTraceparent(ctx context.Context, params interface{}) interface{} {
 	if !trace.SpanFromContext(ctx).SpanContext().IsValid() {
-		return params // no active span — nothing to inject
+		return params
 	}
 
 	carrier := propagation.MapCarrier{}
