@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jaracil/ei"
 	"github.com/nayarsystems/nxgo/nxotel"
 )
 
@@ -30,6 +31,9 @@ func nexusErrorType(err error) string {
 //
 // Returns the (possibly cloned+enriched) params value. If ctx has no active
 // span, or if params is not a map type, the original value is returned unchanged.
+// Map params are normalized through ei so named map types (ei.M and friends)
+// are handled too: a raw type switch on map[string]interface{} would silently
+// skip them.
 func injectTraceparent(ctx context.Context, params interface{}) interface{} {
 	if !trace.SpanFromContext(ctx).SpanContext().IsValid() {
 		return params
@@ -44,13 +48,13 @@ func injectTraceparent(ctx context.Context, params interface{}) interface{} {
 
 	// Build a copy of the params map so we never mutate the caller's value.
 	var pm map[string]interface{}
-	switch v := params.(type) {
-	case map[string]interface{}:
-		pm = v
-	case nil:
+	if params == nil {
 		pm = map[string]interface{}{}
-	default:
-		return params // non-map params: skip silently
+	} else {
+		var err error
+		if pm, err = ei.N(params).MapStr(); err != nil {
+			return params // non-map params: skip silently
+		}
 	}
 
 	cloned := make(map[string]interface{}, len(pm)+1)
