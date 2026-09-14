@@ -2,9 +2,11 @@ package nxcore
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
@@ -14,8 +16,8 @@ import (
 var rpcOtel = nxotel.New("github.com/nayarsystems/nxgo", nxotel.Client, nexusErrorType)
 
 // recordRPCCall records metrics for one Nexus RPC call.
-func recordRPCCall(ctx context.Context, start time.Time, method string, err error) {
-	rpcOtel.RecordCall(ctx, start, method, "", err)
+func recordRPCCall(ctx context.Context, start time.Time, method string, err error, extra ...attribute.KeyValue) {
+	rpcOtel.RecordCall(ctx, start, method, "", err, extra...)
 }
 
 // nexusErrorType returns a short string describing the Nexus/JSON-RPC error.
@@ -73,8 +75,20 @@ func injectTraceparent(ctx context.Context, params interface{}) interface{} {
 }
 
 // startClientSpan starts an OTel client span for a Nexus RPC call.
-func startClientSpan(ctx context.Context, method string) (context.Context, trace.Span) {
-	return rpcOtel.StartSpan(ctx, method, "")
+func startClientSpan(ctx context.Context, method string, extra ...attribute.KeyValue) (context.Context, trace.Span) {
+	return rpcOtel.StartSpan(ctx, method, "", extra...)
+}
+
+// serviceFromMethod derives the Nexus service path from a task method by
+// cutting at the last dot and keeping the trailing dot, matching the path
+// convention of the Nexus task table ("a.b.c" -> "a.b."). Returns "" when the
+// method has no dot.
+func serviceFromMethod(method string) string {
+	i := strings.LastIndex(method, ".")
+	if i < 0 {
+		return ""
+	}
+	return method[:i+1]
 }
 
 // endClientSpan sets the span status based on err and ends it.

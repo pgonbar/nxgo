@@ -107,8 +107,9 @@ func (o *Otel) getInstruments() *instruments {
 
 // StartSpan starts an RPC span. service is the Nexus path for the server side
 // and may be empty on the client side (the client does not know the remote
-// service path).
-func (o *Otel) StartSpan(ctx context.Context, method, service string) (context.Context, trace.Span) {
+// service path). Extra attributes (e.g. the pushed task destination) can be
+// provided to enrich the span.
+func (o *Otel) StartSpan(ctx context.Context, method, service string, extra ...attribute.KeyValue) (context.Context, trace.Span) {
 	kind := trace.SpanKindClient
 	if o.side == Server {
 		kind = trace.SpanKindServer
@@ -121,6 +122,7 @@ func (o *Otel) StartSpan(ctx context.Context, method, service string) (context.C
 	if service != "" {
 		attrs = append(attrs, attribute.String("rpc.service", service))
 	}
+	attrs = append(attrs, extra...)
 
 	return otel.Tracer(o.scope).Start(ctx, method,
 		trace.WithSpanKind(kind),
@@ -140,7 +142,7 @@ func (o *Otel) EndSpan(span trace.Span, err error) {
 }
 
 // RecordCall records duration and request count for one RPC call.
-func (o *Otel) RecordCall(ctx context.Context, start time.Time, method, service string, err error) {
+func (o *Otel) RecordCall(ctx context.Context, start time.Time, method, service string, err error, extra ...attribute.KeyValue) {
 	instr := o.getInstruments()
 	durMs := float64(time.Since(start).Microseconds()) / 1000.0
 
@@ -151,6 +153,7 @@ func (o *Otel) RecordCall(ctx context.Context, start time.Time, method, service 
 	if service != "" {
 		attrs = append(attrs, attribute.String("rpc.service", service))
 	}
+	attrs = append(attrs, extra...)
 	if err != nil {
 		attrs = append(attrs, attribute.String("error.type", o.errorTyper(err)))
 	}

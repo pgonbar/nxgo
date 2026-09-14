@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/jaracil/ei"
 	"github.com/jaracil/smartio"
 )
@@ -408,13 +410,19 @@ func (nc *NexusConn) ExecNoWait(method string, params interface{}) (id uint64, r
 // becomes the parent; otherwise a root span is created. The W3C traceparent of the active span is
 // injected into params["@metadata"]["traceparent"] so the server side can correlate traces end-to-end.
 func (nc *NexusConn) ExecCtx(ctx context.Context, method string, params interface{}) (result interface{}, err error) {
+	return nc.execCtx(ctx, method, params)
+}
+
+// execCtx is ExecCtx with support for extra OTel attributes on the call span
+// and its metrics.
+func (nc *NexusConn) execCtx(ctx context.Context, method string, params interface{}, extra ...attribute.KeyValue) (result interface{}, err error) {
 	start := time.Now()
-	ctx, span := startClientSpan(ctx, method)
+	ctx, span := startClientSpan(ctx, method, extra...)
 	defer func() { endClientSpan(span, err) }()
 
 	id, rch, err := nc.ExecNoWait(method, injectTraceparent(ctx, params))
 	if err != nil {
-		recordRPCCall(ctx, start, method, err)
+		recordRPCCall(ctx, start, method, err, extra...)
 		return nil, err
 	}
 	defer nc.delId(id)
@@ -430,7 +438,7 @@ func (nc *NexusConn) ExecCtx(ctx context.Context, method string, params interfac
 		err = NewJsonRpcErr(ErrConnClosed, "", nil)
 	}
 
-	recordRPCCall(ctx, start, method, err)
+	recordRPCCall(ctx, start, method, err, extra...)
 	return
 }
 

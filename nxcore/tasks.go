@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/jaracil/ei"
 )
 
@@ -13,6 +15,9 @@ import (
 // If ctx carries an active OTel span its W3C traceparent is injected into
 // params["@metadata"]["traceparent"], enabling end-to-end trace correlation
 // through the Nexus broker to the worker that pulls the task.
+// The task.push span/metrics are enriched with the destination: rpc.service
+// holds the derived Nexus path (best-effort: the real path is decided by the
+// broker on pull) and nexus.task.method holds the full task method.
 func (nc *NexusConn) TaskPushCtx(ctx context.Context, method string, params interface{}, timeout time.Duration, opts ...*TaskOpts) (interface{}, error) {
 	par := ei.M{
 		"method": method,
@@ -32,7 +37,10 @@ func (nc *NexusConn) TaskPushCtx(ctx context.Context, method string, params inte
 	if timeout > 0 {
 		par["timeout"] = float64(timeout) / float64(time.Second)
 	}
-	return nc.ExecCtx(ctx, "task.push", par)
+	return nc.execCtx(ctx, "task.push", par,
+		attribute.String("rpc.service", serviceFromMethod(method)),
+		attribute.String("nexus.task.method", method),
+	)
 }
 
 // TaskPush pushes a task to Nexus cloud.
@@ -71,13 +79,22 @@ func (nc *NexusConn) TaskPushCh(method string, params interface{}, timeout time.
 // timeout is the maximum time waiting for a task.
 // Returns a new incomming Task or error.
 func (nc *NexusConn) TaskPull(prefix string, timeout time.Duration) (*Task, error) {
+	return nc.TaskPullCtx(context.Background(), prefix, timeout)
+}
+
+// TaskPullCtx pulls a task from Nexus cloud with context propagation.
+// The task.pull span/metrics carry the served prefix as rpc.service.
+// prefix is the method prefix we want pull Ex. "test.fibonacci"
+// timeout is the maximum time waiting for a task.
+// Returns a new incomming Task or error.
+func (nc *NexusConn) TaskPullCtx(ctx context.Context, prefix string, timeout time.Duration) (*Task, error) {
 	par := map[string]interface{}{
 		"prefix": prefix,
 	}
 	if timeout > 0 {
 		par["timeout"] = float64(timeout) / float64(time.Second)
 	}
-	res, err := nc.Exec("task.pull", par)
+	res, err := nc.execCtx(ctx, "task.pull", par, attribute.String("rpc.service", prefix))
 	if err != nil {
 		return nil, err
 	}
